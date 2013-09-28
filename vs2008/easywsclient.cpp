@@ -98,14 +98,10 @@ socket_t hostname_connect(std::string hostname, int port) {
     return sockfd;
 }
 
-}
 
-
-
-namespace easywsclient {
-
-struct _DummyWebSocket : public WebSocket
+class _DummyWebSocket : public easywsclient::WebSocket
 {
+  public:
     void poll() { }
     void send(std::string message) { }
     void close() { } 
@@ -115,30 +111,29 @@ struct _DummyWebSocket : public WebSocket
 
 
 
-struct _RealWebSocket : public WebSocket
+class _RealWebSocket : public easywsclient::WebSocket
 {
-    #if 0
-    http://tools.ietf.org/html/rfc6455#section-5.2  Base Framing Protocol
-
-     0                   1                   2                   3
-     0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-    +-+-+-+-+-------+-+-------------+-------------------------------+
-    |F|R|R|R| opcode|M| Payload len |    Extended payload length    |
-    |I|S|S|S|  (4)  |A|     (7)     |             (16/64)           |
-    |N|V|V|V|       |S|             |   (if payload len==126/127)   |
-    | |1|2|3|       |K|             |                               |
-    +-+-+-+-+-------+-+-------------+ - - - - - - - - - - - - - - - +
-    |     Extended payload length continued, if payload len == 127  |
-    + - - - - - - - - - - - - - - - +-------------------------------+
-    |                               |Masking-key, if MASK set to 1  |
-    +-------------------------------+-------------------------------+
-    | Masking-key (continued)       |          Payload Data         |
-    +-------------------------------- - - - - - - - - - - - - - - - +
-    :                     Payload Data continued ...                :
-    + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
-    |                     Payload Data continued ...                |
-    +---------------------------------------------------------------+
-    #endif
+  public:
+    // http://tools.ietf.org/html/rfc6455#section-5.2  Base Framing Protocol
+    //
+    //  0                   1                   2                   3
+    //  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+    // +-+-+-+-+-------+-+-------------+-------------------------------+
+    // |F|R|R|R| opcode|M| Payload len |    Extended payload length    |
+    // |I|S|S|S|  (4)  |A|     (7)     |             (16/64)           |
+    // |N|V|V|V|       |S|             |   (if payload len==126/127)   |
+    // | |1|2|3|       |K|             |                               |
+    // +-+-+-+-+-------+-+-------------+ - - - - - - - - - - - - - - - +
+    // |     Extended payload length continued, if payload len == 127  |
+    // + - - - - - - - - - - - - - - - +-------------------------------+
+    // |                               |Masking-key, if MASK set to 1  |
+    // +-------------------------------+-------------------------------+
+    // | Masking-key (continued)       |          Payload Data         |
+    // +-------------------------------- - - - - - - - - - - - - - - - +
+    // :                     Payload Data continued ...                :
+    // + - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - +
+    // |                     Payload Data continued ...                |
+    // +---------------------------------------------------------------+
     struct wsheader_type {
         unsigned header_size;
         bool fin;
@@ -184,7 +179,11 @@ struct _RealWebSocket : public WebSocket
             int N = rxbuf.size();
             ssize_t ret;
             rxbuf.resize(N + 1500);
-            ret = recv(sockfd, (char*)&rxbuf[0] + N, 1500, 0);
+#ifdef _WIN32
+            ret = recv(sockfd, (int8_t*)&rxbuf[0] + N, 1500, 0);
+#else
+            ret = recv(sockfd, &rxbuf[0] + N, 1500, 0);
+#endif
             if (false) { }
             else if (ret < 0) {
                 rxbuf.resize(N);
@@ -203,8 +202,12 @@ struct _RealWebSocket : public WebSocket
         }
         while (txbuf.size()) {
             int ret;
-            ret = ::send(sockfd, (char*)&txbuf[0], txbuf.size(), 0);
-            if (ret > 0) { txbuf.erase(txbuf.begin(), txbuf.begin() + ret); }
+#ifdef _WIN32
+			ret = ::send(sockfd, (int8_t*)&txbuf[0], txbuf.size(), 0);
+#else
+			ret = ::send(sockfd, &txbuf[0], txbuf.size(), 0);
+#endif
+			if (ret > 0) { txbuf.erase(txbuf.begin(), txbuf.begin() + ret); }
             else { break; }
         }
         if (!txbuf.size() && readyState == CLOSING) {
@@ -326,8 +329,11 @@ struct _RealWebSocket : public WebSocket
 
 
 
+} // end of module-only namespace
 
 
+
+namespace easywsclient {
 
 WebSocket::pointer WebSocket::create_dummy() {
     static pointer dummy = pointer(new _DummyWebSocket);
